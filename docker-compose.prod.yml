@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: juridico-crm-backend
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_SSL=${DATABASE_SSL:-false}
+      - DATAJUD_API_KEY=${DATAJUD_API_KEY}
+      - DATAJUD_BASE_URL=https://api-publica.datajud.cnj.jus.br
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE_NAME=${EVOLUTION_INSTANCE_NAME:-juridico-crm}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - BASE_URL=${BASE_URL}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - VAPID_EMAIL=${VAPID_EMAIL:-mailto:admin@escritorio.com}
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - juridico-net
+      - traefik
+    depends_on:
+      - evolution
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.routers.juridico-backend.rule=Host(`${CRM_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))
+      - traefik.http.routers.juridico-backend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.juridico-backend.tls=true
+      - traefik.http.routers.juridico-backend.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.juridico-backend.priority=20
+      - traefik.http.services.juridico-backend.loadbalancer.server.port=3001
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: juridico-crm-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - juridico-net
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.routers.juridico-frontend.rule=Host(`${CRM_DOMAIN}`)
+      - traefik.http.routers.juridico-frontend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.juridico-frontend.tls=true
+      - traefik.http.routers.juridico-frontend.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.juridico-frontend.priority=10
+      - traefik.http.services.juridico-frontend.loadbalancer.server.port=80
+
+  evolution:
+    image: atendai/evolution-api:latest
+    container_name: juridico-evolution
+    restart: unless-stopped
+    environment:
+      - SERVER_TYPE=http
+      - SERVER_PORT=8080
+      - CORS_ORIGIN=${FRONTEND_URL}
+      - CORS_CREDENTIALS=true
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - DATABASE_ENABLED=true
+      - DATABASE_CONNECTION_URI=mongodb://mongodb:27017/evolution
+      - DATABASE_CONNECTION_DB_PREFIX_NAME=evolution
+    volumes:
+      - evolution_data:/evolution/instances
+    networks:
+      - juridico-net
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:6
+    container_name: juridico-mongodb
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - juridico-net
+
+networks:
+  juridico-net:
+    driver: bridge
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
+
+volumes:
+  backend_uploads:
+  evolution_data:
+  mongodb_data:

@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-navy-900 text-gray-100 font-sans antialiased;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #1e4b85 #0f1f35;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track { background: #0f1f35; }
+  *::-webkit-scrollbar-thumb { background: #1e4b85; border-radius: 3px; }
+}
+
+@layer components {
+  .card {
+    @apply bg-navy-800 border border-navy-700 rounded-xl p-5 shadow-lg;
+  }
+
+  .btn-primary {
+    @apply bg-gold-500 hover:bg-gold-400 text-navy-900 font-semibold px-4 py-2 rounded-lg
+           transition-all duration-200 flex items-center gap-2 text-sm disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply bg-navy-700 hover:bg-navy-600 text-gray-100 font-medium px-4 py-2 rounded-lg
+           transition-all duration-200 flex items-center gap-2 text-sm border border-navy-600;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg
+           transition-all duration-200 flex items-center gap-2 text-sm;
+  }
+
+  .input {
+    @apply w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-gray-100
+           placeholder-gray-500 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500
+           transition-colors duration-200;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-gray-400 mb-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-prospecto  { @apply badge bg-gray-700 text-gray-300; }
+  .badge-qualificado { @apply badge bg-blue-900 text-blue-300; }
+  .badge-ativo      { @apply badge bg-green-900 text-green-300; }
+  .badge-encerrado  { @apply badge bg-purple-900 text-purple-300; }
+  .badge-perdido    { @apply badge bg-red-900 text-red-400; }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           text-gray-400 hover:text-gray-100 hover:bg-navy-700 transition-all duration-200 cursor-pointer;
+  }
+
+  .sidebar-link.active {
+    @apply bg-navy-700 text-gold-400 border-l-2 border-gold-500;
+  }
+}
+
+/* Animações */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse-dot { animation: pulse-dot 2s infinite; }
