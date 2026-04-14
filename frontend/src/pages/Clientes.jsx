@@ -144,21 +144,29 @@ export default function Clientes() {
   const [busca, setBusca] = useState('');
   const [status, setStatus] = useState(searchParams.get('status') || '');
   const [carregando, setCarregando] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState('');
   const [modal, setModal] = useState(null); // null | 'novo' | {cliente}
   const [stats, setStats] = useState(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    setErroCarregamento('');
     try {
-      const [resClientes, resStats] = await Promise.all([
-        clientesAPI.listar({ busca, status, pagina, limite: 20 }),
-        clientesAPI.stats()
-      ]);
+      const resClientes = await clientesAPI.listar({ busca, status, pagina, limite: 20 });
       setClientes(resClientes.data.dados);
       setTotal(resClientes.data.total);
-      setStats(resStats.data);
+
+      try {
+        const resStats = await clientesAPI.stats();
+        setStats(resStats.data);
+      } catch (statsErr) {
+        console.error('Erro ao carregar estatisticas de clientes:', statsErr);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Erro ao carregar clientes:', e);
+      setErroCarregamento(e.response?.data?.erro || 'Erro ao carregar clientes. Tente novamente.');
+      setClientes([]);
+      setTotal(0);
     } finally {
       setCarregando(false);
     }
@@ -218,6 +226,12 @@ export default function Clientes() {
           {STATUS_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
       </div>
+
+      {erroCarregamento && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-2.5 text-red-400 text-sm">
+          {erroCarregamento}
+        </div>
+      )}
 
       {/* Tabela */}
       <div className="card p-0 overflow-hidden">

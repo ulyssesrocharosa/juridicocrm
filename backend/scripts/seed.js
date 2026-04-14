@@ -3,10 +3,12 @@
  * Uso: node scripts/seed.js
  */
 
+require('dotenv').config();
+
 const db = require('../db/database');
 
 async function main() {
-await db.ready;
+  await db.ready;
 
 
 // Buscar o id do admin
@@ -602,4 +604,6 @@ console.log('\n✅ Seed concluído com sucesso!');
 main().catch((err) => {
   console.error('Erro ao executar seed:', err);
   process.exit(1);
+}).finally(async () => {
+  await db.close().catch(() => {});
 });
