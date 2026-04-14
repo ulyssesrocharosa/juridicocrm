@@ -15,7 +15,7 @@ version: '3.8'
 services:
 
   backend:
-    image: juridico-crm-backend:latest
+    image: ghcr.io/ulyssesrocharosa/juridico-crm-backend:latest
     environment:
       - PORT=3001
       - NODE_ENV=production
@@ -57,7 +57,7 @@ services:
         - traefik.http.services.juridico-backend.loadbalancer.sticky.cookie.name=juridico_sticky
 
   frontend:
-    image: juridico-crm-frontend:latest
+    image: ghcr.io/ulyssesrocharosa/juridico-crm-frontend:latest
     networks:
       - juridico-net
       - traefik
