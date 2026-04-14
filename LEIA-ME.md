@@ -36,7 +36,149 @@ O frontend estará em: **http://localhost:5173**
 
 ---
 
-## 🐳 Deploy com Docker Compose (Produção)
+## 🚀 Deploy na VPS (Docker Swarm + Portainer + Traefik)
+
+> Estrutura usada: Docker Swarm + Portainer + Traefik + GitHub Actions + ghcr.io
+
+---
+
+### PASSO 1 — Subir o código no GitHub
+
+#### 1.1 Criar o repositório no GitHub
+
+Acesse github.com → **New repository**
+- Nome: `juridicocrm`
+- Visibilidade: Private
+- Não inicializar com nada
+
+#### 1.2 Inicializar o git local
+
+```bash
+cd /pasta/do/projeto
+
+git init
+git branch -M main
+git remote add origin https://github.com/ulyssesrocharosa/juridicocrm.git
+```
+
+#### 1.3 Criar o `.gitignore`
+
+```bash
+cat > .gitignore << 'EOF'
+node_modules/
+.env
+backend/data/
+backend/uploads/
+frontend/dist/
+*.log
+EOF
+```
+
+#### 1.4 Primeiro commit e push
+
+```bash
+git add .
+git commit -m "feat: initial commit"
+git push -u origin main
+```
+
+O push já dispara o GitHub Actions automaticamente. Acompanhe o build na aba **Actions** do repositório — aguarde ficar verde antes de continuar.
+
+As imagens geradas ficam disponíveis em:
+```
+ghcr.io/ulyssesrocharosa/juridico-crm-backend:latest
+ghcr.io/ulyssesrocharosa/juridico-crm-frontend:latest
+```
+
+---
+
+### PASSO 2 — Preparar a VPS
+
+#### 2.1 Gerar token do GitHub para puxar imagens
+
+No GitHub: **Settings → Developer Settings → Personal access tokens → Tokens (classic) → Generate new token**
+- Note: `vps-docker-pull`
+- Permissão: marque apenas `read:packages`
+
+#### 2.2 Autenticar o Docker da VPS
+
+```bash
+echo SEU_TOKEN_AQUI | docker login ghcr.io -u ulyssesrocharosa --password-stdin
+# Deve retornar: Login Succeeded
+```
+
+#### 2.3 Criar o banco de dados
+
+```bash
+docker exec -it $(docker ps -q -f name=postgres) psql -U postgres -c "CREATE DATABASE juridico_crm;"
+```
+
+#### 2.4 Criar o DNS
+
+No painel do seu provedor de domínio, adicione:
+```
+Tipo: A
+Nome: juridico
+Valor: IP_DA_SUA_VPS
+```
+
+---
+
+### PASSO 3 — Deploy no Portainer
+
+1. Acesse o Portainer → **Stacks → Add Stack**
+2. Nome da stack: `juridico`
+3. Build method: **Web editor**
+4. Cole o conteúdo do arquivo `docker-stack.yml`
+5. Adicione as variáveis de ambiente:
+
+| Variável | Valor |
+|----------|-------|
+| `JWT_SECRET` | uma chave longa e aleatória |
+| `EVOLUTION_API_URL` | `https://evolution.vmdautobot.pro` |
+| `EVOLUTION_API_KEY` | sua chave da Evolution API |
+
+6. Clique em **Deploy the stack**
+
+---
+
+### PASSO 4 — Inicializar o banco (só na primeira vez)
+
+Após a stack subir:
+
+```bash
+docker exec -it $(docker ps -q -f name=juridico_backend) node scripts/init-db.js
+```
+
+Acesse: **https://juridico.vmdautobot.pro**
+
+Login inicial: `admin@juridico.com` / `admin123` — troque a senha imediatamente.
+
+---
+
+### PASSO 5 — Atualizações futuras
+
+A cada alteração no código:
+
+```bash
+git add .
+git commit -m "fix: descrição da alteração"
+git push origin main
+# GitHub Actions builda as novas imagens automaticamente
+```
+
+Para aplicar na VPS:
+
+```bash
+docker service update --force --image ghcr.io/ulyssesrocharosa/juridico-crm-backend:latest juridico_backend
+docker service update --force --image ghcr.io/ulyssesrocharosa/juridico-crm-frontend:latest juridico_frontend
+```
+
+Ou pelo Portainer: **Stacks → juridico → Update the stack**
+
+---
+
+## 🐳 Deploy com Docker Compose (Produção local)
 
 ### 1. Configurar variáveis de ambiente
 

@@ -219,6 +219,16 @@ const schemaSql = `
     atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS instancias_whatsapp (
+    id SERIAL PRIMARY KEY,
+    nome TEXT NOT NULL,
+    evolution_url TEXT NOT NULL,
+    evolution_key TEXT NOT NULL,
+    instance_name TEXT NOT NULL,
+    ativo BOOLEAN DEFAULT true,
+    criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_clientes_status ON clientes(status_lead);
   CREATE INDEX IF NOT EXISTS idx_processos_cliente ON processos(cliente_id);
   CREATE INDEX IF NOT EXISTS idx_processos_numero ON processos(numero_cnj);

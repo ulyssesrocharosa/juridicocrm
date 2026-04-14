@@ -101,6 +101,15 @@ export const whatsappAPI = {
   enviarMensagem: (id, conteudo) => api.post(`/whatsapp/conversas/${id}/mensagens`, { conteudo }),
   novaConversa: (dados) => api.post('/whatsapp/nova-conversa', dados),
   vincularCliente: (id, cliente_id) => api.put(`/whatsapp/conversas/${id}/vincular`, { cliente_id }),
+  // Instâncias
+  instancias: () => api.get('/whatsapp/instancias'),
+  criarInstancia: (dados) => api.post('/whatsapp/instancias', dados),
+  atualizarInstancia: (id, dados) => api.put(`/whatsapp/instancias/${id}`, dados),
+  deletarInstancia: (id) => api.delete(`/whatsapp/instancias/${id}`),
+  statusInstancia: (id) => api.get(`/whatsapp/instancias/${id}/status`),
+  qrcodeInstancia: (id) => api.get(`/whatsapp/instancias/${id}/qrcode`),
+  conectarInstancia: (id) => api.post(`/whatsapp/instancias/${id}/conectar`),
+  desconectarInstancia: (id) => api.post(`/whatsapp/instancias/${id}/desconectar`),
 };
 
 // ============================================================

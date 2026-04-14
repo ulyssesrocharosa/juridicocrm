@@ -171,6 +171,113 @@ router.put('/conversas/:id/vincular', autenticar, async (req, res) => {
   }
 });
 
+// ============================================================
+// CRUD DE INSTÂNCIAS
+// ============================================================
+
+// GET /whatsapp/instancias - Listar instâncias configuradas
+router.get('/instancias', autenticar, async (req, res) => {
+  try {
+    const instancias = await db.prepare('SELECT * FROM instancias_whatsapp ORDER BY criado_em ASC').all();
+    res.json(instancias);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// POST /whatsapp/instancias - Criar nova instância
+router.post('/instancias', autenticar, async (req, res) => {
+  try {
+    const { nome, evolution_url, evolution_key, instance_name } = req.body;
+    if (!nome || !evolution_url || !evolution_key || !instance_name) {
+      return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
+    }
+    const result = await db.prepare(`
+      INSERT INTO instancias_whatsapp (nome, evolution_url, evolution_key, instance_name)
+      VALUES (?, ?, ?, ?)
+    `).run(nome, evolution_url, evolution_key, instance_name);
+    const instancia = await db.prepare('SELECT * FROM instancias_whatsapp WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(instancia);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// PUT /whatsapp/instancias/:id - Atualizar instância
+router.put('/instancias/:id', autenticar, async (req, res) => {
+  try {
+    const { nome, evolution_url, evolution_key, instance_name, ativo } = req.body;
+    await db.prepare(`
+      UPDATE instancias_whatsapp
+      SET nome = ?, evolution_url = ?, evolution_key = ?, instance_name = ?, ativo = ?
+      WHERE id = ?
+    `).run(nome, evolution_url, evolution_key, instance_name, ativo !== false, req.params.id);
+    const instancia = await db.prepare('SELECT * FROM instancias_whatsapp WHERE id = ?').get(req.params.id);
+    res.json(instancia);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// DELETE /whatsapp/instancias/:id - Remover instância
+router.delete('/instancias/:id', autenticar, async (req, res) => {
+  try {
+    await db.prepare('DELETE FROM instancias_whatsapp WHERE id = ?').run(req.params.id);
+    res.json({ mensagem: 'Instância removida' });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// GET /whatsapp/instancias/:id/status - Status de uma instância específica
+router.get('/instancias/:id/status', autenticar, async (req, res) => {
+  try {
+    const instancia = await db.prepare('SELECT * FROM instancias_whatsapp WHERE id = ?').get(req.params.id);
+    if (!instancia) return res.status(404).json({ erro: 'Instância não encontrada' });
+    const status = await evolution.verificarConexao(instancia);
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// GET /whatsapp/instancias/:id/qrcode - QR Code de uma instância
+router.get('/instancias/:id/qrcode', autenticar, async (req, res) => {
+  try {
+    const instancia = await db.prepare('SELECT * FROM instancias_whatsapp WHERE id = ?').get(req.params.id);
+    if (!instancia) return res.status(404).json({ erro: 'Instância não encontrada' });
+    const qr = await evolution.obterQRCode(instancia);
+    res.json(qr);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// POST /whatsapp/instancias/:id/conectar - Conectar instância
+router.post('/instancias/:id/conectar', autenticar, async (req, res) => {
+  try {
+    const instancia = await db.prepare('SELECT * FROM instancias_whatsapp WHERE id = ?').get(req.params.id);
+    if (!instancia) return res.status(404).json({ erro: 'Instância não encontrada' });
+    await evolution.criarInstancia(instancia);
+    const qr = await evolution.obterQRCode(instancia);
+    res.json(qr);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// POST /whatsapp/instancias/:id/desconectar - Desconectar instância
+router.post('/instancias/:id/desconectar', autenticar, async (req, res) => {
+  try {
+    const instancia = await db.prepare('SELECT * FROM instancias_whatsapp WHERE id = ?').get(req.params.id);
+    if (!instancia) return res.status(404).json({ erro: 'Instância não encontrada' });
+    await evolution.desconectar(instancia);
+    res.json({ mensagem: 'Instância desconectada' });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // POST /whatsapp/webhook - Receber eventos da Evolution API
 router.post('/webhook', async (req, res) => {
   try {

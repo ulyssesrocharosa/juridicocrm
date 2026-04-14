@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { authAPI, notificacoesAPI, whatsappAPI } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+
+const INSTANCIA_VAZIA = { nome: '', evolution_url: '', evolution_key: '', instance_name: '' };
 
 export default function Configuracoes() {
   const { usuario } = useAuth();
   const [abaAtiva, setAbaAtiva] = useState('conta');
   const [usuarios, setUsuarios] = useState([]);
-  const [whatsappStatus, setWhatsappStatus] = useState(null);
   const [senhaForm, setSenhaForm] = useState({ senhaAtual: '', novaSenha: '', confirmar: '' });
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', email: '', senha: '', perfil: 'advogado' });
   const [salvandoSenha, setSalvandoSenha] = useState(false);
@@ -14,17 +15,40 @@ export default function Configuracoes() {
   const [msg, setMsg] = useState('');
   const [erro, setErro] = useState('');
 
+  // WhatsApp — instâncias
+  const [instancias, setInstancias] = useState([]);
+  const [statusInstancias, setStatusInstancias] = useState({});
+  const [modalInstancia, setModalInstancia] = useState(null); // null | 'nova' | objeto (editar)
+  const [formInstancia, setFormInstancia] = useState(INSTANCIA_VAZIA);
+  const [salvandoInstancia, setSalvandoInstancia] = useState(false);
+  const [modalQR, setModalQR] = useState(null); // null | { id, qrcode, nome }
+  const [carregandoQR, setCarregandoQR] = useState(false);
+  const poolingRef = useRef({});
+
   useEffect(() => {
     if (abaAtiva === 'usuarios') carregarUsuarios();
-    if (abaAtiva === 'whatsapp') verificarWhatsapp();
+    if (abaAtiva === 'whatsapp') carregarInstancias();
   }, [abaAtiva]);
 
   const carregarUsuarios = async () => {
     try { const r = await authAPI.listarUsuarios(); setUsuarios(r.data); } catch(e){}
   };
 
-  const verificarWhatsapp = async () => {
-    try { const r = await whatsappAPI.status(); setWhatsappStatus(r.data); } catch(e){}
+  const carregarInstancias = async () => {
+    try {
+      const r = await whatsappAPI.instancias();
+      setInstancias(r.data);
+      r.data.forEach(i => verificarStatusInstancia(i.id));
+    } catch(e){}
+  };
+
+  const verificarStatusInstancia = async (id) => {
+    try {
+      const r = await whatsappAPI.statusInstancia(id);
+      setStatusInstancias(prev => ({ ...prev, [id]: r.data }));
+    } catch(e) {
+      setStatusInstancias(prev => ({ ...prev, [id]: { conectado: false, estado: 'error' } }));
+    }
   };
 
   const mostrar = (m, e = false) => {
@@ -68,15 +92,85 @@ export default function Configuracoes() {
     }
   };
 
-  const desconectarWhatsapp = async () => {
-    if (!confirm('Deseja desconectar o WhatsApp?')) return;
+  const abrirModalNova = () => {
+    setFormInstancia(INSTANCIA_VAZIA);
+    setModalInstancia('nova');
+  };
+
+  const abrirModalEditar = (instancia) => {
+    setFormInstancia({ ...instancia });
+    setModalInstancia(instancia);
+  };
+
+  const salvarInstancia = async (e) => {
+    e.preventDefault();
+    setSalvandoInstancia(true);
     try {
-      await whatsappAPI.desconectar();
-      verificarWhatsapp();
-      mostrar('WhatsApp desconectado');
+      if (modalInstancia === 'nova') {
+        await whatsappAPI.criarInstancia(formInstancia);
+        mostrar('Instância criada com sucesso!');
+      } else {
+        await whatsappAPI.atualizarInstancia(modalInstancia.id, formInstancia);
+        mostrar('Instância atualizada!');
+      }
+      setModalInstancia(null);
+      carregarInstancias();
+    } catch(err) {
+      mostrar(err.response?.data?.erro || 'Erro ao salvar instância', true);
+    } finally { setSalvandoInstancia(false); }
+  };
+
+  const deletarInstancia = async (id, nome) => {
+    if (!confirm(`Remover a instância "${nome}"?`)) return;
+    try {
+      await whatsappAPI.deletarInstancia(id);
+      mostrar('Instância removida');
+      carregarInstancias();
+    } catch(err) {
+      mostrar('Erro ao remover instância', true);
+    }
+  };
+
+  const conectarInstancia = async (instancia) => {
+    setCarregandoQR(true);
+    setModalQR({ id: instancia.id, nome: instancia.nome, qrcode: null });
+    try {
+      const r = await whatsappAPI.conectarInstancia(instancia.id);
+      setModalQR({ id: instancia.id, nome: instancia.nome, qrcode: r.data.qrcode });
+      // Polling de status até conectar
+      const interval = setInterval(async () => {
+        const s = await whatsappAPI.statusInstancia(instancia.id);
+        setStatusInstancias(prev => ({ ...prev, [instancia.id]: s.data }));
+        if (s.data.conectado) {
+          clearInterval(interval);
+          setModalQR(null);
+          mostrar(`${instancia.nome} conectado!`);
+        }
+      }, 3000);
+      poolingRef.current[instancia.id] = interval;
+    } catch(err) {
+      setModalQR(null);
+      mostrar(err.response?.data?.erro || 'Erro ao conectar. Verifique a URL e a chave da Evolution API.', true);
+    } finally { setCarregandoQR(false); }
+  };
+
+  const desconectarInstancia = async (instancia) => {
+    if (!confirm(`Desconectar "${instancia.nome}"?`)) return;
+    try {
+      await whatsappAPI.desconectarInstancia(instancia.id);
+      verificarStatusInstancia(instancia.id);
+      mostrar(`${instancia.nome} desconectado`);
     } catch(err) {
       mostrar('Erro ao desconectar', true);
     }
+  };
+
+  const fecharModalQR = (id) => {
+    if (poolingRef.current[id]) {
+      clearInterval(poolingRef.current[id]);
+      delete poolingRef.current[id];
+    }
+    setModalQR(null);
   };
 
   const ABAS = [
@@ -217,37 +311,160 @@ export default function Configuracoes() {
       {/* WhatsApp */}
       {abaAtiva === 'whatsapp' && (
         <div className="space-y-4">
-          <div className="card">
-            <h2 className="text-sm font-semibold text-white mb-4">Status da Conexão</h2>
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-3 h-3 rounded-full ${whatsappStatus?.conectado ? 'bg-green-400' : 'bg-red-400'}`} />
-              <div>
-                <p className="text-sm font-medium text-white">
-                  {whatsappStatus?.conectado ? '✅ Conectado' : '❌ Desconectado'}
-                </p>
-                {whatsappStatus?.numero && (
-                  <p className="text-xs text-gray-500">Número: {whatsappStatus.numero}</p>
-                )}
-              </div>
+
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Instâncias WhatsApp</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Gerencie as conexões com a Evolution API</p>
             </div>
-            <div className="flex gap-3">
-              <button onClick={verificarWhatsapp} className="btn-secondary text-xs">🔄 Atualizar Status</button>
-              {whatsappStatus?.conectado && (
-                <button onClick={desconectarWhatsapp} className="btn-danger text-xs">Desconectar</button>
-              )}
-            </div>
+            <button onClick={abrirModalNova} className="btn-primary text-xs">
+              + Nova Instância
+            </button>
           </div>
 
-          <div className="card">
-            <h2 className="text-sm font-semibold text-white mb-2">Evolution API</h2>
-            <p className="text-xs text-gray-400 mb-4">
-              Configure a URL e a chave da sua instância Evolution API no arquivo <code className="text-gold-400">.env</code> do backend.
-            </p>
-            <div className="bg-navy-900 rounded-lg p-3 font-mono text-xs text-gray-400 space-y-1">
-              <p>EVOLUTION_API_URL=http://seu-servidor:8080</p>
-              <p>EVOLUTION_API_KEY=sua_chave_aqui</p>
-              <p>EVOLUTION_INSTANCE_NAME=juridico-crm</p>
+          {/* Lista de instâncias */}
+          {instancias.length === 0 ? (
+            <div className="card text-center py-10">
+              <p className="text-4xl mb-3">📱</p>
+              <p className="text-sm font-medium text-white mb-1">Nenhuma instância configurada</p>
+              <p className="text-xs text-gray-500 mb-4">Adicione uma instância para conectar o WhatsApp ao sistema</p>
+              <button onClick={abrirModalNova} className="btn-primary text-xs">+ Adicionar Instância</button>
             </div>
+          ) : (
+            <div className="space-y-3">
+              {instancias.map(inst => {
+                const status = statusInstancias[inst.id];
+                const conectado = status?.conectado;
+                return (
+                  <div key={inst.id} className="card">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${conectado ? 'bg-green-400' : 'bg-red-400'}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{inst.nome}</p>
+                          <p className="text-xs text-gray-500 truncate">Instância: {inst.instance_name}</p>
+                          <p className="text-xs text-gray-600 truncate">{inst.evolution_url}</p>
+                          {conectado && status?.numero && (
+                            <p className="text-xs text-green-400 mt-0.5">📞 {status.numero}</p>
+                          )}
+                          {!conectado && (
+                            <span className="inline-block text-xs text-red-400 mt-0.5">Desconectado</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => verificarStatusInstancia(inst.id)}
+                          className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-navy-700 transition-colors"
+                          title="Atualizar status"
+                        >🔄</button>
+                        {!conectado ? (
+                          <button
+                            onClick={() => conectarInstancia(inst)}
+                            className="btn-primary text-xs px-3 py-1.5"
+                          >Conectar</button>
+                        ) : (
+                          <button
+                            onClick={() => desconectarInstancia(inst)}
+                            className="btn-danger text-xs px-3 py-1.5"
+                          >Desconectar</button>
+                        )}
+                        <button
+                          onClick={() => abrirModalEditar(inst)}
+                          className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-navy-700 transition-colors"
+                          title="Editar"
+                        >✏️</button>
+                        <button
+                          onClick={() => deletarInstancia(inst.id, inst.nome)}
+                          className="p-1.5 rounded text-gray-400 hover:text-red-400 hover:bg-navy-700 transition-colors"
+                          title="Remover"
+                        >🗑️</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Botão recarregar */}
+          {instancias.length > 0 && (
+            <button onClick={carregarInstancias} className="btn-secondary text-xs w-full">
+              🔄 Atualizar todas
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Modal — Nova/Editar Instância */}
+      {modalInstancia !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-navy-800 rounded-xl w-full max-w-md p-6 space-y-4 shadow-xl">
+            <h2 className="text-base font-semibold text-white">
+              {modalInstancia === 'nova' ? '+ Nova Instância' : `Editar — ${modalInstancia.nome}`}
+            </h2>
+            <form onSubmit={salvarInstancia} className="space-y-3">
+              <div>
+                <label className="label">Nome da instância *</label>
+                <input className="input" placeholder="Ex: Escritório Principal"
+                  value={formInstancia.nome}
+                  onChange={e => setFormInstancia(p => ({ ...p, nome: e.target.value }))} required />
+              </div>
+              <div>
+                <label className="label">URL da Evolution API *</label>
+                <input className="input" placeholder="https://evolution.seudominio.com"
+                  value={formInstancia.evolution_url}
+                  onChange={e => setFormInstancia(p => ({ ...p, evolution_url: e.target.value }))} required />
+              </div>
+              <div>
+                <label className="label">API Key *</label>
+                <input className="input" placeholder="Sua chave de API"
+                  value={formInstancia.evolution_key}
+                  onChange={e => setFormInstancia(p => ({ ...p, evolution_key: e.target.value }))} required />
+              </div>
+              <div>
+                <label className="label">Nome da instância (Evolution) *</label>
+                <input className="input" placeholder="Ex: juridico-crm"
+                  value={formInstancia.instance_name}
+                  onChange={e => setFormInstancia(p => ({ ...p, instance_name: e.target.value }))} required />
+                <p className="text-xs text-gray-500 mt-1">Nome que será usado na Evolution API para identificar esta instância.</p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={salvandoInstancia} className="btn-primary flex-1">
+                  {salvandoInstancia ? 'Salvando...' : 'Salvar'}
+                </button>
+                <button type="button" onClick={() => setModalInstancia(null)} className="btn-secondary flex-1">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — QR Code */}
+      {modalQR !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-navy-800 rounded-xl w-full max-w-sm p-6 text-center space-y-4 shadow-xl">
+            <h2 className="text-base font-semibold text-white">Conectar — {modalQR.nome}</h2>
+            {carregandoQR || !modalQR.qrcode ? (
+              <div className="py-10">
+                <div className="w-8 h-8 border-2 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm text-gray-400">Gerando QR Code...</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-gray-400">Abra o WhatsApp no celular → Dispositivos conectados → Conectar dispositivo</p>
+                <div className="bg-white p-3 rounded-lg inline-block">
+                  <img src={modalQR.qrcode} alt="QR Code" className="w-48 h-48" />
+                </div>
+                <p className="text-xs text-gray-500 animate-pulse">Aguardando escaneamento...</p>
+              </>
+            )}
+            <button onClick={() => fecharModalQR(modalQR.id)} className="btn-secondary w-full text-sm">
+              Fechar
+            </button>
           </div>
         </div>
       )}

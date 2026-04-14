@@ -8,22 +8,30 @@ const EVOLUTION_URL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
 const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || '';
 const INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME || 'juridico-crm';
 
-const api = axios.create({
-  baseURL: EVOLUTION_URL,
-  headers: {
-    'apikey': EVOLUTION_KEY,
-    'Content-Type': 'application/json'
-  },
-  timeout: 10000
-});
+function getApiClient(config = {}) {
+  return axios.create({
+    baseURL: config.evolution_url || EVOLUTION_URL,
+    headers: {
+      'apikey': config.evolution_key || EVOLUTION_KEY,
+      'Content-Type': 'application/json'
+    },
+    timeout: 10000
+  });
+}
+
+function getInstanceName(config = {}) {
+  return config.instance_name || INSTANCE_NAME;
+}
 
 /**
  * Criar instância do WhatsApp
  */
-async function criarInstancia() {
+async function criarInstancia(config = {}) {
   try {
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
     const res = await api.post('/instance/create', {
-      instanceName: INSTANCE_NAME,
+      instanceName,
       qrcode: true,
       integration: 'WHATSAPP-BAILEYS'
     });
@@ -36,9 +44,11 @@ async function criarInstancia() {
 /**
  * Obter QR Code para conectar WhatsApp
  */
-async function obterQRCode() {
+async function obterQRCode(config = {}) {
   try {
-    const res = await api.get(`/instance/connect/${INSTANCE_NAME}`);
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
+    const res = await api.get(`/instance/connect/${instanceName}`);
     return {
       qrcode: res.data?.base64 || res.data?.qrcode?.base64 || null,
       pairingCode: res.data?.pairingCode || null,
@@ -52,9 +62,11 @@ async function obterQRCode() {
 /**
  * Verificar status da conexão
  */
-async function verificarConexao() {
+async function verificarConexao(config = {}) {
   try {
-    const res = await api.get(`/instance/connectionState/${INSTANCE_NAME}`);
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
+    const res = await api.get(`/instance/connectionState/${instanceName}`);
     return {
       conectado: res.data?.instance?.state === 'open',
       estado: res.data?.instance?.state || 'unknown',
@@ -68,12 +80,13 @@ async function verificarConexao() {
 /**
  * Enviar mensagem de texto
  */
-async function enviarMensagem(numero, mensagem) {
+async function enviarMensagem(numero, mensagem, config = {}) {
   try {
-    // Formatar número: apenas dígitos com código do país
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
     const numeroFormatado = formatarNumero(numero);
 
-    const res = await api.post(`/message/sendText/${INSTANCE_NAME}`, {
+    const res = await api.post(`/message/sendText/${instanceName}`, {
       number: numeroFormatado,
       text: mensagem
     });
@@ -91,12 +104,14 @@ async function enviarMensagem(numero, mensagem) {
 /**
  * Enviar arquivo/imagem
  */
-async function enviarArquivo(numero, url, caption = '', tipo = 'document') {
+async function enviarArquivo(numero, url, caption = '', tipo = 'document', config = {}) {
   try {
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
     const numeroFormatado = formatarNumero(numero);
     const endpoint = tipo === 'image' ? 'sendImage' : 'sendMedia';
 
-    const res = await api.post(`/message/${endpoint}/${INSTANCE_NAME}`, {
+    const res = await api.post(`/message/${endpoint}/${instanceName}`, {
       number: numeroFormatado,
       mediatype: tipo,
       media: url,
@@ -112,9 +127,11 @@ async function enviarArquivo(numero, url, caption = '', tipo = 'document') {
 /**
  * Buscar chats/conversas ativas
  */
-async function buscarChats() {
+async function buscarChats(config = {}) {
   try {
-    const res = await api.get(`/chat/findChats/${INSTANCE_NAME}`);
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
+    const res = await api.get(`/chat/findChats/${instanceName}`);
     return res.data || [];
   } catch (err) {
     console.error('Erro ao buscar chats:', err.message);
@@ -125,10 +142,12 @@ async function buscarChats() {
 /**
  * Buscar mensagens de uma conversa
  */
-async function buscarMensagens(numero, quantidade = 50) {
+async function buscarMensagens(numero, quantidade = 50, config = {}) {
   try {
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
     const numeroFormatado = formatarNumero(numero);
-    const res = await api.post(`/chat/findMessages/${INSTANCE_NAME}`, {
+    const res = await api.post(`/chat/findMessages/${instanceName}`, {
       where: {
         key: {
           remoteJid: `${numeroFormatado}@s.whatsapp.net`
@@ -146,10 +165,12 @@ async function buscarMensagens(numero, quantidade = 50) {
 /**
  * Marcar mensagens como lidas
  */
-async function marcarComoLido(numero) {
+async function marcarComoLido(numero, config = {}) {
   try {
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
     const numeroFormatado = formatarNumero(numero);
-    await api.post(`/chat/markMessageAsRead/${INSTANCE_NAME}`, {
+    await api.post(`/chat/markMessageAsRead/${instanceName}`, {
       readMessages: [{
         remoteJid: `${numeroFormatado}@s.whatsapp.net`,
         fromMe: false,
@@ -165,9 +186,11 @@ async function marcarComoLido(numero) {
 /**
  * Configurar webhook para receber mensagens em tempo real
  */
-async function configurarWebhook(webhookUrl) {
+async function configurarWebhook(webhookUrl, config = {}) {
   try {
-    const res = await api.post(`/webhook/set/${INSTANCE_NAME}`, {
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
+    const res = await api.post(`/webhook/set/${instanceName}`, {
       webhook: {
         enabled: true,
         url: webhookUrl,
@@ -188,11 +211,27 @@ async function configurarWebhook(webhookUrl) {
 }
 
 /**
- * Buscar chats com atividade recente na Evolution API
+ * Desconectar instância
  */
-async function buscarChatsRecentes() {
+async function desconectar(config = {}) {
   try {
-    const res = await api.get(`/chat/findChats/${INSTANCE_NAME}`);
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
+    await api.delete(`/instance/logout/${instanceName}`);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
+ * Buscar chats com atividade recente
+ */
+async function buscarChatsRecentes(config = {}) {
+  try {
+    const api = getApiClient(config);
+    const instanceName = getInstanceName(config);
+    const res = await api.get(`/chat/findChats/${instanceName}`);
     return Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error('Polling: erro ao buscar chats:', err.message);
@@ -202,13 +241,13 @@ async function buscarChatsRecentes() {
 
 /**
  * Sincronizar mensagens recebidas (polling - funciona sem URL pública)
- * Chama findMessages para cada conversa com atividade recente
  */
-async function sincronizarMensagensRecentes(sinceTimestamp) {
-  const chats = await buscarChatsRecentes();
+async function sincronizarMensagensRecentes(sinceTimestamp, config = {}) {
+  const api = getApiClient(config);
+  const instanceName = getInstanceName(config);
+  const chats = await buscarChatsRecentes(config);
   const novas = [];
 
-  // Filtrar apenas chats com atividade após o timestamp
   const chatsRecentes = chats.filter(c => {
     const ts = c.updatedAt || c.lastMsgTimestamp;
     if (!ts) return false;
@@ -219,9 +258,9 @@ async function sincronizarMensagensRecentes(sinceTimestamp) {
   for (const chat of chatsRecentes) {
     try {
       const jid = chat.id || chat.remoteJid;
-      if (!jid || jid.includes('@g.us')) continue; // ignorar grupos
+      if (!jid || jid.includes('@g.us')) continue;
 
-      const res = await api.post(`/chat/findMessages/${INSTANCE_NAME}`, {
+      const res = await api.post(`/chat/findMessages/${instanceName}`, {
         where: { key: { remoteJid: jid, fromMe: false } },
         limit: 20
       });
@@ -256,28 +295,13 @@ async function sincronizarMensagensRecentes(sinceTimestamp) {
 }
 
 /**
- * Desconectar instância
- */
-async function desconectar() {
-  try {
-    await api.delete(`/instance/logout/${INSTANCE_NAME}`);
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-
-/**
  * Formatar número para o padrão Evolution API
  */
 function formatarNumero(numero) {
   let limpo = numero.replace(/\D/g, '');
-
-  // Se não começar com código do país, adicionar 55 (Brasil)
   if (!limpo.startsWith('55') && limpo.length <= 11) {
     limpo = '55' + limpo;
   }
-
   return limpo;
 }
 
@@ -288,7 +312,6 @@ function processarWebhook(payload) {
   const evento = payload.event;
 
   if (evento === 'messages.upsert') {
-    // Evolution API pode enviar data como array, objeto único ou { messages: [] }
     let msgs = [];
     if (Array.isArray(payload.data)) {
       msgs = payload.data;

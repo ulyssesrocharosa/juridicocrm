@@ -43,6 +43,10 @@ desktop.ini
 .vscode/
 .idea/
 
+# Docs
+LEIA-ME.md
+DEPLOY-GUIA.md
+
 # Test and cache output
 coverage/
 .nyc_output/
