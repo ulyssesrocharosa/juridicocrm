@@ -1,0 +1,89 @@
+version: '3.8'
+
+# =============================================================
+#  JurisCRM — Docker Swarm Stack (Traefik)
+#  Deploy: docker stack deploy -c docker-stack.yml juridico
+# =============================================================
+#
+# Pré-requisito: construir as imagens na VPS antes do deploy
+#   docker build -t juridico-crm-backend:latest ./backend
+#   docker build -t juridico-crm-frontend:latest ./frontend
+#
+# Copie .env.example para .env e preencha antes de subir.
+# =============================================================
+
+services:
+
+  backend:
+    image: juridico-crm-backend:latest
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_SSL=${DATABASE_SSL:-false}
+      - DATAJUD_API_KEY=${DATAJUD_API_KEY}
+      - DATAJUD_BASE_URL=https://api-publica.datajud.cnj.jus.br
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE_NAME=${EVOLUTION_INSTANCE_NAME:-juridico-crm}
+      - FRONTEND_URL=https://${CRM_DOMAIN}
+      - BASE_URL=https://${CRM_DOMAIN}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - VAPID_EMAIL=${VAPID_EMAIL:-mailto:admin@escritorio.com}
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - juridico-net
+      - traefik
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+        # Rota para /api e /socket.io (prioridade maior)
+        - traefik.http.routers.juridico-backend.rule=Host(`${CRM_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))
+        - traefik.http.routers.juridico-backend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.juridico-backend.tls=true
+        - traefik.http.routers.juridico-backend.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.juridico-backend.priority=20
+        - traefik.http.services.juridico-backend.loadbalancer.server.port=3001
+        # Sticky session para Socket.io (necessário se escalar replicas)
+        - traefik.http.services.juridico-backend.loadbalancer.sticky.cookie=true
+        - traefik.http.services.juridico-backend.loadbalancer.sticky.cookie.name=juridico_sticky
+
+  frontend:
+    image: juridico-crm-frontend:latest
+    networks:
+      - juridico-net
+      - traefik
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+        # Rota principal (prioridade menor — /api vai para o backend)
+        - traefik.http.routers.juridico-frontend.rule=Host(`${CRM_DOMAIN}`)
+        - traefik.http.routers.juridico-frontend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.juridico-frontend.tls=true
+        - traefik.http.routers.juridico-frontend.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.juridico-frontend.priority=10
+        - traefik.http.services.juridico-frontend.loadbalancer.server.port=80
+
+networks:
+  juridico-net:
+    driver: overlay
+    attachable: true
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
+
+volumes:
+  backend_uploads:
