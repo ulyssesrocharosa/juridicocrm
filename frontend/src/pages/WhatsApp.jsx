@@ -1,47 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { whatsappAPI, clientesAPI } from '../api';
 import { useSocket } from '../hooks/useSocket';
 
-function QRCodeModal({ qrcode, onClose, onConectado }) {
-  const [verificando, setVerificando] = useState(false);
-
-  const verificarConexao = async () => {
-    setVerificando(true);
-    try {
-      const res = await whatsappAPI.status();
-      if (res.data.conectado) { onConectado(); onClose(); }
-      else alert('WhatsApp ainda não conectado. Aguarde o QR Code ser escaneado.');
-    } finally {
-      setVerificando(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-navy-800 border border-navy-600 rounded-2xl p-8 max-w-sm w-full text-center animate-fade-in">
-        <h2 className="text-lg font-bold text-white mb-2">Conectar WhatsApp</h2>
-        <p className="text-gray-400 text-sm mb-6">Escaneie o QR Code com o WhatsApp do seu celular</p>
-        {qrcode ? (
-          <div className="bg-white rounded-xl p-4 inline-block mb-6">
-            <img src={`data:image/png;base64,${qrcode.replace('data:image/png;base64,', '')}`}
-              alt="QR Code WhatsApp" className="w-48 h-48" />
-          </div>
-        ) : (
-          <div className="w-48 h-48 bg-navy-700 rounded-xl flex items-center justify-center mx-auto mb-6">
-            <p className="text-gray-500 text-sm">Gerando QR Code...</p>
-          </div>
-        )}
-        <p className="text-xs text-gray-500 mb-4">Abra o WhatsApp → Menu → Aparelhos conectados → Conectar aparelho</p>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancelar</button>
-          <button onClick={verificarConexao} disabled={verificando} className="btn-primary flex-1 justify-center">
-            {verificando ? 'Verificando...' : '✅ Já escaniei'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function NovaConversaModal({ onClose, onCriar }) {
   const [numero, setNumero] = useState('');
@@ -101,9 +62,8 @@ export default function WhatsApp() {
   const [mensagens, setMensagens] = useState([]);
   const [novaMensagem, setNovaMensagem] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [qrModal, setQrModal] = useState(false);
-  const [qrData, setQrData] = useState(null);
   const [novaConversaModal, setNovaConversaModal] = useState(false);
+  const navigate = useNavigate();
   const [buscaConversa, setBuscaConversa] = useState('');
   const messagesEndRef = useRef(null);
   const { entrarConversa, sairConversa } = useSocket(
@@ -164,15 +124,8 @@ export default function WhatsApp() {
     } catch (e) {}
   };
 
-  const conectarWhatsApp = async () => {
-    try {
-      await whatsappAPI.conectar();
-      const res = await whatsappAPI.qrcode();
-      setQrData(res.data);
-      setQrModal(true);
-    } catch (e) {
-      alert('Erro ao conectar WhatsApp: ' + e.message);
-    }
+  const conectarWhatsApp = () => {
+    navigate('/configuracoes', { state: { aba: 'whatsapp' } });
   };
 
   const enviarMensagem = async (e) => {
@@ -345,13 +298,6 @@ export default function WhatsApp() {
       </div>
 
       {/* Modais */}
-      {qrModal && (
-        <QRCodeModal
-          qrcode={qrData?.qrcode}
-          onClose={() => setQrModal(false)}
-          onConectado={() => { verificarStatus(); setQrModal(false); }}
-        />
-      )}
       {novaConversaModal && (
         <NovaConversaModal onClose={() => setNovaConversaModal(false)} onCriar={criarNovaConversa} />
       )}

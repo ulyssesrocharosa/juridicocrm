@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { authAPI, notificacoesAPI, whatsappAPI } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,7 +7,8 @@ const INSTANCIA_VAZIA = { nome: '', evolution_url: '', evolution_key: '', instan
 
 export default function Configuracoes() {
   const { usuario } = useAuth();
-  const [abaAtiva, setAbaAtiva] = useState('conta');
+  const location = useLocation();
+  const [abaAtiva, setAbaAtiva] = useState(location.state?.aba || 'conta');
   const [usuarios, setUsuarios] = useState([]);
   const [senhaForm, setSenhaForm] = useState({ senhaAtual: '', novaSenha: '', confirmar: '' });
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', email: '', senha: '', perfil: 'advogado' });

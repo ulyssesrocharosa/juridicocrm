@@ -5,9 +5,21 @@ const evolution = require('../services/evolutionApi');
 
 const router = express.Router();
 
-// GET /whatsapp/status - Status da conexão
+// GET /whatsapp/status - Status da conexão (checa instâncias do banco primeiro)
 router.get('/status', autenticar, async (req, res) => {
   try {
+    // Verificar instâncias configuradas no banco
+    const instancias = await db.prepare('SELECT * FROM instancias_whatsapp WHERE ativo = true').all();
+    if (instancias.length > 0) {
+      for (const inst of instancias) {
+        const status = await evolution.verificarConexao(inst);
+        if (status.conectado) {
+          return res.json({ ...status, instancia_nome: inst.nome, instancia_id: inst.id });
+        }
+      }
+      return res.json({ conectado: false, estado: 'disconnected' });
+    }
+    // Fallback para variáveis de ambiente
     const status = await evolution.verificarConexao();
     res.json(status);
   } catch (err) {
